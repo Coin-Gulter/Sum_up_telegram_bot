@@ -21,7 +21,7 @@ BOT_USERNAME = 'big_summarizer_bot'
 AI_MODEL_NAME = "gpt-3.5-turbo"
 ANSWEAR_FLAG = '<answear>\n'
 ASK_START_FLAG = '&'
-SYSTEM_MESSAGE = f"""
+SYSTEM_MESSAGE = """
                 You are AI and your point is to sum up text and give only very short answear to user.
                 But you can give user information only if you confident in it. 
                 
@@ -400,9 +400,18 @@ async def text_message_parser(update: Update, context: ContextTypes.DEFAULT_TYPE
                 chat_name = update.message.chat.username
 
                 if message_text == 'x':
+
                     chat_history = load_json_file(chat_name)
-                    last_message = message_text
                     previous_message = get_message_from_history(chat_history, -1)
+                
+                    save_message(chat_name, chat_id, user_id, message_id, username, message_text)
+
+                    if previous_message['message_text'] in ['/sum_up', '/remove_chat']:
+                        await context.bot.send_message(chat_id, f"Good, your command {previous_message['message_text']} canceled 😌")
+                        save_message(chat_name, chat_id, user_id, message_id+1, BOT_USERNAME, f"Good, your command {previous_message['message_text']} canceled 😌")
+                    else:
+                        await context.bot.send_message(chat_id, "Sorry, you don't have command to cancel 😅")
+                        save_message(chat_name, chat_id, user_id, message_id+1, BOT_USERNAME, "Sorry, you don't have command to cancel 😅")
                     
                 else:
 
@@ -411,86 +420,79 @@ async def text_message_parser(update: Update, context: ContextTypes.DEFAULT_TYPE
                     last_message = get_message_from_history(chat_history, -1)
                     access_list_upper = [key.upper() for key in list(access_dict.keys())]
 
-                match last_message['message_text']:
-                    case '/sum_up':
-                        save_message(chat_name, chat_id, user_id, message_id, username, message_text)
+                    match last_message['message_text']:
+                        case '/sum_up':
+                            save_message(chat_name, chat_id, user_id, message_id, username, message_text)
 
-                        not_in_format = False
-                        splited_message = message_text.split('\n')
-                        parser_chat_name = splited_message[0]
-                        
-                        match len(splited_message):
-                            case 1:
-                                parser_number = '100'
-                            case 2:
-                                parser_number = splited_message[1]
-                            case _:
-                                not_in_format = True
+                            not_in_format = False
+                            splited_message = message_text.split('\n')
+                            parser_chat_name = splited_message[0]
+                            
+                            match len(splited_message):
+                                case 1:
+                                    parser_number = '100'
+                                case 2:
+                                    parser_number = splited_message[1]
+                                case _:
+                                    not_in_format = True
 
-                        if not(parser_chat_name.upper() in access_list_upper):
-                            await context.bot.send_message(chat_id, "Sorry you enter chat name that I don't see, try again using /sum_up command 😅")
-                        elif not_in_format:
-                            await context.bot.send_message(chat_id, "Sorry your instruction isn't in correct format, try again using /sum_up command 😅")
-                        elif not parser_number.isdigit():
-                            await context.bot.send_message(chat_id, "Sorry you write number in incorect format, try again using /sum_up command 😅")
-                        else:
+                            if not(parser_chat_name.upper() in access_list_upper):
+                                await context.bot.send_message(chat_id, "Sorry you enter chat name that I don't see, try again using /sum_up command 😅")
+                            elif not_in_format:
+                                await context.bot.send_message(chat_id, "Sorry your instruction isn't in correct format, try again using /sum_up command 😅")
+                            elif not parser_number.isdigit():
+                                await context.bot.send_message(chat_id, "Sorry you write number in incorect format, try again using /sum_up command 😅")
+                            else:
+                                await context.bot.send_message(chat_id, ".")
+
+                                parsing_history = load_json_file(list(access_dict.keys())[access_list_upper.index(parser_chat_name.upper())])
+                                history_text = format_chat_from_json2text(parsing_history, int(parser_number))
+
+
+                                await context.bot.edit_message_text(". .", chat_id, message_id+1)
+
+                                prompt = make_prompt(history_text)
+                                completion = get_completion(prompt)
+                                completion = re.sub(f'^{ANSWEAR_FLAG}', '', completion)
+
+                                save_message(chat_name, chat_id, user_id, message_id+2, BOT_USERNAME, ANSWEAR_FLAG+completion)
+
+                                await context.bot.edit_message_text(". . .", chat_id, message_id+1)
+
+                                try:
+                                    await context.bot.send_message(chat_id, completion)
+                                except telegram.error.BadRequest:
+                                    await context.bot.send_message(chat_id, "Sory, something went wrong try again 😅")
+
+                        case '/remove_chat':
+                            save_message(chat_name, chat_id, user_id, message_id, username, message_text)
+
+                            if message_text.upper() in access_list_upper:
+                                file_name = make_access_file_name(username, user_id)
+                                del access_dict[list(access_dict.keys())[access_list_upper.index(message_text.upper())]]
+                                with open(os.path.join(PATH_CHAT_ACCESS, file_name +'.json'), "w+") as file:
+                                    json.dump(access_dict, file)
+                                await context.bot.send_message(chat_id, f"Good, chat '{message_text}' deleted from your list 😄")
+                            else:
+                                await context.bot.send_message(chat_id, "Sorry you enter chat name that I don't see, try again using /remove_chat command 😅")
+                        case _:
                             await context.bot.send_message(chat_id, ".")
 
-                            parsing_history = load_json_file(list(access_dict.keys())[access_list_upper.index(parser_chat_name.upper())])
-                            history_text = format_chat_from_json2text(parsing_history, int(parser_number))
+                            save_message(chat_name, chat_id, user_id, message_id, username, ASK_START_FLAG+message_text)
+                            chat_history = load_json_file(chat_name)
 
-
+                            message_text = re.sub(f'^{ASK_START_FLAG}', '', message_text)
+                            
                             await context.bot.edit_message_text(". .", chat_id, message_id+1)
 
-                            prompt = make_prompt(history_text)
-                            completion = get_completion(prompt)
+                            chatbot_messages = make_chatbot_history(chat_history)
+                            completion = get_completion(chatbot_messages)
                             completion = re.sub(f'^{ANSWEAR_FLAG}', '', completion)
 
                             save_message(chat_name, chat_id, user_id, message_id+2, BOT_USERNAME, ANSWEAR_FLAG+completion)
 
                             await context.bot.edit_message_text(". . .", chat_id, message_id+1)
-
-                            try:
-                                await context.bot.send_message(chat_id, completion)
-                            except telegram.error.BadRequest:
-                                await context.bot.send_message(chat_id, f"Sory, something went wrong try again 😅")
-
-                    case '/remove_chat':
-                        save_message(chat_name, chat_id, user_id, message_id, username, message_text)
-
-                        if message_text.upper() in access_list_upper:
-                            del access_dict[list(access_dict.keys())[access_list_upper.index(parser_chat_name.upper())]]
-                            await context.bot.send_message(chat_id, f"Good, chat '{message_text}' deleted from your list 😄")
-                        else:
-                            await context.bot.send_message(chat_id, "Sorry you enter chat name that I don't see, try again using /remove_chat command 😅")
-
-                    case 'x':
-                        save_message(chat_name, chat_id, user_id, message_id, username, message_text)
-
-                        if previous_message['message_text'] in ['/sum_up', '/show_chats', '/remove_chat']:
-                            await context.bot.send_message(chat_id, f"Good, your command {previous_message['message_text']} canceled 😌")
-                            save_message(chat_name, chat_id, user_id, message_id+1, BOT_USERNAME, f"Good, your command {previous_message['message_text']} canceled 😌")
-                        else:
-                            await context.bot.send_message(chat_id, "Sorry, you don't have command to cancel 😅")
-                            save_message(chat_name, chat_id, user_id, message_id+1, BOT_USERNAME, "Sorry, you don't have command to cancel 😅")
-                    case _:
-                        await context.bot.send_message(chat_id, ".")
-
-                        save_message(chat_name, chat_id, user_id, message_id, username, ASK_START_FLAG+message_text)
-                        chat_history = load_json_file(chat_name)
-
-                        message_text = re.sub(f'^{ASK_START_FLAG}', '', message_text)
-                        
-                        await context.bot.edit_message_text(". .", chat_id, message_id+1)
-
-                        chatbot_messages = make_chatbot_history(chat_history)
-                        completion = get_completion(chatbot_messages)
-                        completion = re.sub(f'^{ANSWEAR_FLAG}', '', completion)
-
-                        save_message(chat_name, chat_id, user_id, message_id+2, BOT_USERNAME, ANSWEAR_FLAG+completion)
-
-                        await context.bot.edit_message_text(". . .", chat_id, message_id+1)
-                        await context.bot.send_message(chat_id, completion)
+                            await context.bot.send_message(chat_id, completion)
                                     
             case Chat.GROUP | Chat.SUPERGROUP:
                 chat_name = update.message.chat.title
