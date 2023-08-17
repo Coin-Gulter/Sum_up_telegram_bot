@@ -5,13 +5,17 @@ import os
 import re
 import tiktoken
 import telegram
-import asyncio
 from telegram import Update, Chat, ReplyKeyboardMarkup, KeyboardButton
 from telegram.ext import ApplicationBuilder, ContextTypes, CommandHandler, MessageHandler, filters
 
-PATH_CHAT_HISTORY = 'chat_history'
-PATH_CHAT_ACCESS = 'chat_access'
-PATH_KEYS_ACCESS = 'keys_access'
+
+# Set the path to the project directory
+PATH = os.getcwd()
+
+# Define the paths to the chat history and keys access directories
+PATH_CHAT_HISTORY = os.path.join(PATH, 'chat_history')
+PATH_KEYS_ACCESS = os.path.join(PATH, 'keys_access')
+PATH_CHAT_ACCESS = os.path.join(PATH, 'chat_access')
 
 BOT_USERNAME = 'big_summarizer_bot'
 AI_MODEL_NAME = "gpt-3.5-turbo"
@@ -60,6 +64,20 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO
 )
+
+# Define a function to check if a path exists
+def check_if_needed_path_exist(pathes=[PATH_CHAT_HISTORY, PATH_KEYS_ACCESS, PATH_CHAT_ACCESS]):
+    """Check if the needed paths exist.
+    Args:
+        pathes (list): The list of paths to check.
+    Returns:
+        None
+    """
+    for path in pathes:
+        full_path = os.path.join(PATH, path)
+        if not os.path.exists(full_path):
+            os.mkdir(full_path)
+            print(f'Folder - "{full_path}" created')
 
 def num_tokens_from_messages(messages, model="gpt-3.5-turbo-0613"):
     """Return the number of tokens used by a list of messages."""
@@ -210,9 +228,40 @@ def get_completion(messages, model=AI_MODEL_NAME):
     return response
 
 
+async def helping(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Print help instructions for user."""
+    username = update.effective_user.username
+    user_id = update.effective_user.id
+    message_id = update.message.message_id
+    chat_id = update.effective_chat.id
+
+    save_message(username, user_id,  user_id, message_id, username, message_text='/help')
+
+    await context.bot.send_message(chat_id=chat_id, text="""This bot can sum up the dialog from any group that was registered.\n
+                                   To register croup for bot just add this bot to the group with 'Admin' privileges or if bot
+                                   already in group and added him someone else then send '/start' message in this group.\n
+                                   Bot can sum up dialog from group only in the your private chat.\n
+                                   Bot has four commands in your personal chat:
+                                   /sum_up - to sum up dialog
+                                   /remove_chat - to remove chat from your own list, to remove him from group you need to do it by hand
+                                   /show_chats - to show list of registered for you groups.
+                                   /help - to show helping instruction\n
+                                   """)
+    
+    save_message(username, chat_id,  user_id, message_id+1, BOT_USERNAME, message_text= f"""{ANSWEAR_FLAG}This bot can sum up the dialog from any group that was registered.\n
+                                   To register croup for bot just add this bot to the group with 'Admin' privileges or if bot
+                                   already in group and added him someone else then send '/start' message in this group.\n
+                                   Bot can sum up dialog from group only in the your private chat.\n
+                                   Bot has four commands in your personal chat:
+                                   /sum_up - to sum up dialog
+                                   /remove_chat - to remove chat from your own list, to remove him from group you need to do it by hand
+                                   /show_chats - to show list of registered for you groups.
+                                   /help - to show helping instruction\n
+                                   """)
+
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Saves a user to a JSON file."""
-    print(update)
     match update.message.chat.type:
         case Chat.PRIVATE:
 
@@ -224,7 +273,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             save_message(username, user_id,  user_id, message_id, username, message_text='/start')
             user_access = load_json_file(file_name, PATH_CHAT_ACCESS)
 
-            buttons = [[KeyboardButton('/sum_up')], [KeyboardButton('/show_chats')],[KeyboardButton('/remove_chat')]]
+            buttons = [[KeyboardButton('/sum_up')], [KeyboardButton('/show_chats')],[KeyboardButton('/remove_chat')],[KeyboardButton('/help')]]
             keyboard = ReplyKeyboardMarkup(buttons, resize_keyboard=True)
 
             
@@ -238,26 +287,26 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 with open(os.path.join(PATH_CHAT_ACCESS, file_name +'.json'), "w+") as file:
                     json.dump(user_info, file)
 
-                await context.bot.send_message(chat_id=update.effective_chat.id, text="""Hello, I'm your best friend to sum up everything :)\n
-                                                                                        and I was created by <Comp-pot> group\n
+                await context.bot.send_message(chat_id=update.effective_chat.id, text="""Hello, I'm your best friend to sum up everything :)
+                                                                                        and I was created by <Comp-pot> group
                                                                                         If you want to talk with me or ask me something just 
-                                                                                        write me message.\n 
-                                                                                        Also you have commands below to iteract with me.\n
-                                                                                        To cancel command if you can send 'x'\n
-                                                                                        To give me access to group chat that you want to sum up in future
-                                                                                        just add me to that chat as 'admin user' or if someone else added me before
-                                                                                        just send '/start' command in the chat that I'm in.\n\n
+                                                                                        write me message.
+                                                                                        Also you have commands below to iteract with me.
+                                                                                        If you need to cancel command you can send 'x'
+                                                                                        If you need to give me access to group chat that you want to sum up in future
+                                                                                        just add me to that chat as 'admin user' or just send '/start' command in the chat that 
+                                                                                        I'm in if someone else added me before.\n
                                                                                         Sooo, how can I help you ?""", reply_markup=keyboard)
                 
-                save_message(username, user_id,  user_id, message_id+1, BOT_USERNAME, message_text= f"""{ANSWEAR_FLAG}Hello, I'm your best friend to sum up everything :)\n
-                                                                                        and I was created by <Comp-pot> group\n
+                save_message(username, user_id,  user_id, message_id+1, BOT_USERNAME, message_text= f"""{ANSWEAR_FLAG}Hello, I'm your best friend to sum up everything :)
+                                                                                        and I was created by <Comp-pot> group
                                                                                         If you want to talk with me or ask me something just 
-                                                                                        write me message.\n 
-                                                                                        Also you have commands below to iteract with me.\n
-                                                                                        To cancel command if you can send 'x'\n
+                                                                                        write me message.
+                                                                                        Also you have commands below to iteract with me.
+                                                                                        To cancel command if you can send 'x'
                                                                                         To give me access to group chat that you want to sum up in future
                                                                                         just add me to that chat as 'admin user' or if someone else added me before
-                                                                                        just send '/start' command in the chat that I'm in.\n\n
+                                                                                        just send '/start' command in the chat that I'm in.\n
                                                                                         Sooo, how can I help you ?""")
 
 
@@ -385,21 +434,22 @@ async def text_message_parser(update: Update, context: ContextTypes.DEFAULT_TYPE
                         elif not parser_number.isdigit():
                             await context.bot.send_message(chat_id, "Sorry you write number in incorect format, try again using /sum_up command 😅")
                         else:
+                            await context.bot.send_message(chat_id, ".")
+
                             parsing_history = load_json_file(list(access_dict.keys())[access_list_upper.index(parser_chat_name.upper())])
                             history_text = format_chat_from_json2text(parsing_history, int(parser_number))
 
-                            await context.bot.send_message(chat_id, ".")
-                            await asyncio.sleep(0.5)
-                            await context.bot.edit_message_text(". .", chat_id, message_id+1)
-                            await asyncio.sleep(0.5)
-                            await context.bot.edit_message_text(". . .", chat_id, message_id+1)
 
-                        
+                            await context.bot.edit_message_text(". .", chat_id, message_id+1)
+
                             prompt = make_prompt(history_text)
                             completion = get_completion(prompt)
                             completion = re.sub(f'^{ANSWEAR_FLAG}', '', completion)
 
                             save_message(chat_name, chat_id, user_id, message_id+2, BOT_USERNAME, ANSWEAR_FLAG+completion)
+
+                            await context.bot.edit_message_text(". . .", chat_id, message_id+1)
+
                             try:
                                 await context.bot.send_message(chat_id, completion)
                             except telegram.error.BadRequest:
@@ -424,22 +474,22 @@ async def text_message_parser(update: Update, context: ContextTypes.DEFAULT_TYPE
                             await context.bot.send_message(chat_id, "Sorry, you don't have command to cancel 😅")
                             save_message(chat_name, chat_id, user_id, message_id+1, BOT_USERNAME, "Sorry, you don't have command to cancel 😅")
                     case _:
+                        await context.bot.send_message(chat_id, ".")
+
                         save_message(chat_name, chat_id, user_id, message_id, username, ASK_START_FLAG+message_text)
                         chat_history = load_json_file(chat_name)
 
                         message_text = re.sub(f'^{ASK_START_FLAG}', '', message_text)
                         
-                        await context.bot.send_message(chat_id, ".")
-                        await asyncio.sleep(0.5)
                         await context.bot.edit_message_text(". .", chat_id, message_id+1)
-                        await asyncio.sleep(0.5)
-                        await context.bot.edit_message_text(". . .", chat_id, message_id+1)
 
                         chatbot_messages = make_chatbot_history(chat_history)
                         completion = get_completion(chatbot_messages)
                         completion = re.sub(f'^{ANSWEAR_FLAG}', '', completion)
 
                         save_message(chat_name, chat_id, user_id, message_id+2, BOT_USERNAME, ANSWEAR_FLAG+completion)
+
+                        await context.bot.edit_message_text(". . .", chat_id, message_id+1)
                         await context.bot.send_message(chat_id, completion)
                                     
             case Chat.GROUP | Chat.SUPERGROUP:
@@ -448,17 +498,18 @@ async def text_message_parser(update: Update, context: ContextTypes.DEFAULT_TYPE
 
                 if re.match(f'@{BOT_USERNAME}', message_text):
                     await context.bot.send_message(chat_id, ".")
-                    await asyncio.sleep(0.5)
-                    await context.bot.edit_message_text(". .", chat_id, message_id+1)
-                    await asyncio.sleep(0.5)
-                    await context.bot.edit_message_text(". . .", chat_id, message_id+1)
 
                     chat_history = load_json_file(chat_name)
+
+                    await context.bot.edit_message_text(". .", chat_id, message_id+1)
+                    
                     chatbot_messages = make_chatbot_history(chat_history)
                     completion = get_completion(chatbot_messages)
                     completion = re.sub(f'^{ANSWEAR_FLAG}', '', completion)
 
                     save_message(chat_name, chat_id, user_id, message_id+2, BOT_USERNAME, ANSWEAR_FLAG+completion)
+                    await context.bot.edit_message_text(". . .", chat_id, message_id+1)
+
                     await context.bot.send_message(chat_id, completion)
 
 
@@ -573,6 +624,9 @@ async def sum_up(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 if __name__ == '__main__':
+    # Check if the needed paths exist.
+    check_if_needed_path_exist()
+
     keys_dict = load_json_file('keys', PATH_KEYS_ACCESS)
     token_encoder = tiktoken.encoding_for_model(AI_MODEL_NAME)
 
@@ -580,6 +634,7 @@ if __name__ == '__main__':
     application = ApplicationBuilder().token(keys_dict['telegram']).build()
     
     start_handler = CommandHandler('start', start)
+    help_handler = CommandHandler('help', helping)
     sum_up_handler = CommandHandler('sum_up', sum_up)
     show_chats_handler = CommandHandler('show_chats', show_chats)
     remove_chat_handler = CommandHandler('remove_chat', remove_chat)
@@ -587,6 +642,7 @@ if __name__ == '__main__':
     message_handler = MessageHandler(filters.TEXT, text_message_parser)
 
     application.add_handler(start_handler)
+    application.add_handler(help_handler)
     application.add_handler(show_chats_handler)
     application.add_handler(remove_chat_handler)
     application.add_handler(sum_up_handler)

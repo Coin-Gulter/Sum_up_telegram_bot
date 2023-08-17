@@ -1,2 +1,4 @@
 # Ignoring dataset folders
-.json
+/keys_access_test
+/chat_history
+/chat_access
